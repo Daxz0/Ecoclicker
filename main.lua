@@ -28,9 +28,11 @@ end
 
 local data = {
     currency = 0,
-    currencyPerClick = 100,
+    currencyPerClick = 1,
     currencyPerSecond = 0,
-    carbon = 33565835380000,
+    carbon = 37400000000000,
+    lastCarbonCheck = 37400000000000,
+    carbonRemovalPerSecond = 0,
     upgrades = {
         u1 = {
             name = "Beach Cleaner",
@@ -38,7 +40,7 @@ local data = {
             level = 1,
             cost = 10,
             scalingCost = 1.2,
-            effect = "ocean",
+            effect = "hydro",
             amount = 28,
             color = {0.678, 0.847, 0.902},
             tempColor = nil,
@@ -50,7 +52,7 @@ local data = {
             level = 1,
             cost = 200,
             scalingCost = 1.5,
-            effect = "ocean",
+            effect = "hydro",
             amount = 300,
             color = {0.678, 0.847, 0.902},
             tempColor = nil,
@@ -62,7 +64,7 @@ local data = {
             level = 1,
             cost = 2000,
             scalingCost = 2,
-            effect = "ocean",
+            effect = "hydro",
             amount = 3000,
             color = {0.678, 0.847, 0.902},
             tempColor = nil,
@@ -143,6 +145,26 @@ local data = {
     }
 }
 
+local effects = {
+    atmo = {
+        name = "Atmosphere",
+        color = {0.83, 0.83, 0.83},
+        removalMul = 1,
+
+    },
+    bio = {
+        name = "Biosphere",
+        color = {0.596, 0.984, 0.596},
+        removalMul = 1.2
+    },
+    hydro = {
+        name = "Hydrosphere",
+        color = {0.678, 0.847, 0.902},
+        removalMul = 1.85
+    }
+}
+
+
 local sortedUpgrades = {}
 
 
@@ -152,13 +174,14 @@ function love.load()
     love.graphics.setFont(love.graphics.newFont(24))
 
 
+    
     for i, file in ipairs(files) do
         local fname = file:gsub("%.png", "")
         local newFile = love.graphics.newImage("assets/" .. file)
         loaded[fname] = newFile
     end
-
-
+    
+    spawnCarbonAssets()
     
     for key, upgrade in pairs(data.upgrades) do
         table.insert(sortedUpgrades, upgrade)
@@ -173,7 +196,6 @@ function love.load()
     end)
 end
 
--- Handle upgrades and clicking logic
 function love.mousepressed(x, y, button)
     if button == 1 then
         local trashWidth, trashHeight = loaded["trash"]:getDimensions()
@@ -187,6 +209,10 @@ function love.mousepressed(x, y, button)
         for _, upgrade in ipairs(sortedUpgrades) do
             if x >= 610 and x <= 790 and y >= alignY and y <= alignY + 50 then
                 if data.currency >= upgrade.cost then
+
+                    data.carbonRemovalPerSecond = data.carbonRemovalPerSecond + (upgrade.amount * effects[upgrade.effect].removalMul)
+                    
+                    
                     data.currency = data.currency - upgrade.cost
                     upgrade.level = upgrade.level + 1
                     upgrade.cost = math.ceil(upgrade.cost * upgrade.scalingCost)
@@ -202,17 +228,30 @@ function love.mousepressed(x, y, button)
     end
 end
 
--- Update the game state
 local timer = 0
+local ftimer = 0
+
+local fact = "Soil comprises only 25 percent of the Earth's surface, of which only 10 percent can be used to grow food."
+
+local facts = {"Soil comprises only 25 percent of the Earth's surface, of which only 10 percent can be used to grow food.", "Earth’s surface is two-thirds water. The continents on which we live make up the remainder", "The world produces around 350 million tonnes of plastic waste each year", "Around 60% of the ocean’s plastic is floating on the surface.", "Secondary pollutants are caused by chemical reactions in the atmosphere between different primary pollutants.", "Soil characteristics also affect water quality and aquatic ecosystems.", "Between 1960 and 2015, worldwide agricultural production more than tripled due to these technologies and a significant expansion."}
 
 function love.update(dt)
     timer = timer + dt
+    ftimer = ftimer + dt
+
+    removeCarbonAssets()
 
     if timer >= 1 then
         data.currency = data.currency + data.currencyPerSecond
-        data.carbon = data.carbon - data.currencyPerSecond
+        data.carbon = data.carbon - data.carbonRemovalPerSecond
         timer = 0
     end
+
+    if ftimer >= 10 then
+        fact = facts[math.random(1, #facts)]
+        ftimer = 0
+    end
+
     if isBouncing then
         bounceTime = bounceTime + dt
         local scale = 0.1 + 0.1 * math.sin((bounceTime / bounceDuration) * math.pi)
@@ -256,42 +295,60 @@ local function wrapText(text, font, limit)
     return lines
 end
 
-local effects = {
-    {
-        proper = "atmo",
-        name = "Atmosphere",
-        color = {0.83, 0.83, 0.83},
-        removalMul = 1
-    },
-    {
-        proper = "bio",
-        name = "Biosphere",
-        color = {0.596, 0.984, 0.596},
-        removalMul = 0.01
-    },
-    {
-        proper = "hydro",
-        name = "Hydrosphere",
-        color = {0.678, 0.847, 0.902},
-        removalMul = 1.85
-    }
-}
+
+carbonAssets = {}
+
+function spawnCarbonAssets()
+    for i = 1, 150 do 
+        local x = math.random(-100, 500)
+        local y = math.random(-150, 600)
+        local randNum = math.random(1,3)
+        table.insert(carbonAssets, {
+            image = loaded["carbon_" .. randNum],
+            x = x,
+            y = y,
+            -- width = loaded["carbon_" .. randNum]:getWidth(),
+            -- height = loaded["carbon_" .. randNum]:getHeight(),
+        })
+    end
+end
+
+function removeCarbonAssets()
+    local removeThreshold = 5000
+    for _, i in ipairs(sortedUpgrades) do
+        if (data.lastCarbonCheck - data.carbon) >= removeThreshold then
+            table.remove(carbonAssets)
+            data.lastCarbonCheck = data.carbon
+        end
+    end
+end
+
+
+
 function love.draw()
     
     local startY = -200
 
     love.graphics.setColor(1,1,1)
     love.graphics.draw(loaded["sky"], 235, 0, 0, 0.2, 0.2)
+    love.graphics.draw(loaded["bio"], 145, 190, 0, 0.8, 0.8)
+    love.graphics.draw(loaded["hydro"], 245, 400, 0, 0.4, 0.4)
+
+    for _, carbonAsset in ipairs(carbonAssets) do
+        love.graphics.draw(carbonAsset.image, carbonAsset.x, carbonAsset.y, 0.5, 0.5)
+    end
+
+    -- for _, treeAsset in ipairs(treeAssets) do
+    --     love.graphics.draw(treeAsset.image, treeAsset.x, treeAsset.y)
+    -- end
+
+
     for i, effect in ipairs(effects) do
         local y = startY + (i * 200)
         love.graphics.setFont(love.graphics.newFont(20))
         love.graphics.print(effect.name, 255, y + 5)
         love.graphics.setColor(1, 1, 1)
     end
-    love.graphics.setColor(0,0,0)
-    love.graphics.rectangle("fill", 455, 5, 50, 20)
-    love.graphics.setFont(love.graphics.newFont(15))
-    love.graphics.print("Carbon: ".. formatNumber(data.carbon), 455, 5)
     
     love.graphics.setColor(0.1, 0.5, 0.8)
     love.graphics.rectangle("fill", 0, 0, 250, 600)
@@ -320,26 +377,25 @@ function love.draw()
     love.graphics.print("Money: $" .. formatNumber(math.floor(data.currency)), 45, 25)
     love.graphics.print("Money/S: $" .. formatNumber(math.floor(data.currencyPerSecond)), 45, 65)
     love.graphics.print("Money/C: $" .. formatNumber(math.floor(data.currencyPerClick)), 45, 105)
+    love.graphics.setColor(0,0,0)
+    love.graphics.rectangle("fill", 365, 0, 230, 30)
+    love.graphics.setFont(love.graphics.newFont(15))
+    love.graphics.setColor(1, 1, 1)
+    love.graphics.print("Carbon: ".. data.carbon, 375, 5)
 
     love.graphics.setColor(0.99, 0.99, 0.99)
-    love.graphics.setFont(love.graphics.newFont(10))
-    love.graphics.print("GLOBE Protocols are standardized methods", 15, 500)
-    love.graphics.print("for collecting environmental data.", 15, 520)
-    love.graphics.print("They cover various Earth system areas such", 15, 540)
-    love.graphics.print("as the atmosphere, hydrosphere, biosphere.", 15, 560)
+    love.graphics.setFont(love.graphics.newFont(15))
+
+
+    local wrappedFact = wrapText(fact, love.graphics.getFont(), 220)
+    local factY = 500
+
+    for i, line in ipairs(wrappedFact) do
+        love.graphics.print(line, 15, factY + (i - 1) * 15)
+    end
 
     local alignY = 65
 
-    if globeData and #globeData.results > 0 then
-        local co2 = globeData.results[1].CO2
-        if co2 then
-            if co2 > 450 then
-                data.currencyPerSecond = data.currencyPerSecond * 0.9
-            elseif co2 < 400 then
-                data.currencyPerSecond = data.currencyPerSecond * 1.1
-            end
-        end
-    end
     for _, upgrade in ipairs(sortedUpgrades) do
         local isHovered = mouseX >= 610 and mouseX <= 790 and mouseY >= alignY and mouseY <= alignY + 50
         if upgrade.tempColor then

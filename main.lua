@@ -5,12 +5,13 @@ local isBouncing = false
 local bounceTime = 0
 local bounceDuration = 0.2
 
--- Fetch GLOBE data
-local http = require("socket.http")
-local body, code, headers, status = http.request("https://api.globe.gov/search/v1/measurement/?protocols=carbon_cycle&datefield=measuredDate&startdate=2010-01-01&enddate=2018-01-01&geojson=TRUE&sample=TRUE")
-print(code, status, #body)
 
--- Format large numbers
+
+-- require("ssl")
+-- local https = require("ssl.https")
+-- local body, code, headers, status = https.request("https://www.google.com")
+-- print(status)
+
 function formatNumber(num)
     if num >= 1e12 then
         return string.format("%.1ft", num / 1e12):gsub("%.0t", "t")
@@ -29,13 +30,11 @@ local data = {
     currency = 0,
     currencyPerClick = 100,
     currencyPerSecond = 0,
-    trashRemoved = 0,
-    treesPlanted = 0,
-    carbonRemoved = 0,
+    carbon = 33565835380000,
     upgrades = {
         u1 = {
             name = "Beach Cleaner",
-            desc = "Goes to the beach each day to clean up trash.",
+            desc = "Goes to the beach each day to clean up trash. Removes 28 pounds of debris per hour (1 game second).",
             level = 1,
             cost = 10,
             scalingCost = 1.2,
@@ -47,7 +46,7 @@ local data = {
         },
         u2 = {
             name = "Trash Diver",
-            desc = "Cleans up trash on the ocean floor using trained personnel and advanced equipment.",
+            desc = "Cleans up trash on the ocean floor using trained personnel and advanced equipment. Removes 300 pounds of debris per hour (1 game second).",
             level = 1,
             cost = 200,
             scalingCost = 1.5,
@@ -59,7 +58,7 @@ local data = {
         },
         u3 = {
             name = "Cleaner Boat",
-            desc = "Specialized boats designed to clean up floating trash on the ocean.",
+            desc = "Specialized boats designed to clean up floating trash on the ocean. Removes 3,000 pounds of debris per hour (1 game second).",
             level = 1,
             cost = 2000,
             scalingCost = 2,
@@ -71,7 +70,7 @@ local data = {
         },
         u4 = {
             name = "Tree planter",
-            desc = "Goes to land devastated by deforestation and plants trees.", 
+            desc = "Goes to land devastated by deforestation and plants trees. Plants 30 trees per hour (1 game second).",
             level = 1, 
             cost = 30,
             scalingCost = 2,
@@ -83,7 +82,7 @@ local data = {
         },
         u5 = {
             name = "Robot foresters",
-            desc = "These autonomous robots can plant and care for young trees.",
+            desc = "These autonomous robots can plant and care for young trees. Plants 700 trees per hour (1 game second).",
             level = 1,
             cost = 25000,
             scalingCost = 2,
@@ -95,7 +94,7 @@ local data = {
         },
         u6 = {
             name = "Carbon Scrubbers",
-            desc = "Carbon scrubbers are put on car exhausts and factory smoke stacks to limit the amount of carbon being released into the atmosphere.",
+            desc = "Carbon scrubbers are put on car exhausts and factory smoke stacks to limit the amount of carbon being released into the atmosphere. Removes 50 carbon per hour (1 game second).",
             level = 1,
             cost = 2000,
             scalingCost = 1.5,
@@ -107,7 +106,7 @@ local data = {
         },
         u7 = {
             name = "Seeding Drones",
-            desc = "Map areas where trees would grow best using AI and drop seeds in seed vessels that ensure seed growth.",
+            desc = "Map areas where trees would grow best using AI and drop seeds in seed vessels that ensure seed growth. Plants 4,000 trees per hour (1 game second).",
             level = 1,
             cost = 50000,
             scalingCost = 3,
@@ -119,7 +118,7 @@ local data = {
         },
         u8 = {
             name = "Solar Panels",
-            desc = "Converts solar energy from the Sun into electricity. Solar power produces no emissions during generation itself, replacing the electricity that would’ve been made from emission based methods.",
+            desc = "Converts solar energy from the Sun into electricity. Solar power produces no emissions during generation itself, replacing the electricity that would’ve been made from emission based methods. Prevents 550 carbon per hour (1 game second).",
             level = 1,
             cost = 1500,
             scalingCost = 1.5,
@@ -131,12 +130,12 @@ local data = {
         },
         u9 = {
             name = "Public Transport",
-            desc = "A massive network that can transport large amounts of people. Operates for the general public in a safe, affordable, environmentally friendly way.",
+            desc = "A massive network that can transport large amounts of people. Operates for the general public in a safe, affordable, environmentally friendly way. Prevents 10 carbon per hour (1 game second).",
             level = 1,
             cost = 550000,
             scalingCost = 1.1,
             effect = "atmo",
-            amount = 10,
+            amount = 93,
             color = {0.83, 0.83, 0.83},
             tempColor = nil,
             tempColorDuration = 0
@@ -151,13 +150,16 @@ function love.load()
     love.window.setMode(800, 600)
     love.window.setTitle("EcoClicker Game")
     love.graphics.setFont(love.graphics.newFont(24))
-    customFont = love.graphics.newFont("fonts/SilverFont.ttf", 24)
+
+
     for i, file in ipairs(files) do
         local fname = file:gsub("%.png", "")
         local newFile = love.graphics.newImage("assets/" .. file)
         loaded[fname] = newFile
     end
 
+
+    
     for key, upgrade in pairs(data.upgrades) do
         table.insert(sortedUpgrades, upgrade)
     end
@@ -208,6 +210,7 @@ function love.update(dt)
 
     if timer >= 1 then
         data.currency = data.currency + data.currencyPerSecond
+        data.carbon = data.carbon - data.currencyPerSecond
         timer = 0
     end
     if isBouncing then
@@ -253,37 +256,47 @@ local function wrapText(text, font, limit)
     return lines
 end
 
-function love.draw()
-    local effects = {
-        {
-            name = "Atmosphere",
-            color = {0.83, 0.83, 0.83},
-            carbon = 1000000
-        },
-        {
-            name = "Biosphere",
-            color = {0.596, 0.984, 0.596}
-        },
-        {
-            name = "Hydrosphere",
-            color = {0.678, 0.847, 0.902}
-        }
+local effects = {
+    {
+        proper = "atmo",
+        name = "Atmosphere",
+        color = {0.83, 0.83, 0.83},
+        removalMul = 1
+    },
+    {
+        proper = "bio",
+        name = "Biosphere",
+        color = {0.596, 0.984, 0.596},
+        removalMul = 0.01
+    },
+    {
+        proper = "hydro",
+        name = "Hydrosphere",
+        color = {0.678, 0.847, 0.902},
+        removalMul = 1.85
     }
+}
+function love.draw()
     
     local startY = -200
+
+    love.graphics.setColor(1,1,1)
+    love.graphics.draw(loaded["sky"], 235, 0, 0, 0.2, 0.2)
     for i, effect in ipairs(effects) do
         local y = startY + (i * 200)
-        love.graphics.setColor(unpack(effect.color))
-        love.graphics.rectangle("fill", 200, y, 500, 200)
-        love.graphics.setColor(0, 0, 0)
         love.graphics.setFont(love.graphics.newFont(20))
         love.graphics.print(effect.name, 255, y + 5)
         love.graphics.setColor(1, 1, 1)
     end
-
+    love.graphics.setColor(0,0,0)
+    love.graphics.rectangle("fill", 455, 5, 50, 20)
+    love.graphics.setFont(love.graphics.newFont(15))
+    love.graphics.print("Carbon: ".. formatNumber(data.carbon), 455, 5)
+    
     love.graphics.setColor(0.1, 0.5, 0.8)
     love.graphics.rectangle("fill", 0, 0, 250, 600)
     love.graphics.draw(loaded["backgroundleft"], 0, 0, 0, 250 / loaded["backgroundleft"]:getWidth(), 600 / loaded["backgroundleft"]:getHeight())
+    
 
     love.graphics.setColor(0.3, 0.3, 0.3)
     love.graphics.rectangle("fill", 600, 0, 200, 600)
@@ -301,9 +314,12 @@ function love.draw()
 
     love.graphics.setColor(0, 1, 0)
     love.graphics.setFont(love.graphics.newFont(25))
-    love.graphics.print("Money: $" .. formatNumber(math.floor(data.currency)), 15, 25)
-    love.graphics.print("Money/S: $" .. formatNumber(math.floor(data.currencyPerSecond)), 15, 65)
-    love.graphics.print("Money/C: $" .. formatNumber(math.floor(data.currencyPerClick)), 15, 105)
+    love.graphics.draw(loaded["money"], 5, 23, 0, 0.05,0.05)
+    love.graphics.draw(loaded["money"], 5, 63, 0, 0.05,0.05)
+    love.graphics.draw(loaded["money"], 5, 103, 0, 0.05,0.05)
+    love.graphics.print("Money: $" .. formatNumber(math.floor(data.currency)), 45, 25)
+    love.graphics.print("Money/S: $" .. formatNumber(math.floor(data.currencyPerSecond)), 45, 65)
+    love.graphics.print("Money/C: $" .. formatNumber(math.floor(data.currencyPerClick)), 45, 105)
 
     love.graphics.setColor(0.99, 0.99, 0.99)
     love.graphics.setFont(love.graphics.newFont(10))
@@ -324,7 +340,6 @@ function love.draw()
             end
         end
     end
-    -- Draw upgrades
     for _, upgrade in ipairs(sortedUpgrades) do
         local isHovered = mouseX >= 610 and mouseX <= 790 and mouseY >= alignY and mouseY <= alignY + 50
         if upgrade.tempColor then

@@ -1,5 +1,6 @@
 # Ecoclicker - A 2024 Nasa Space Apps Application
 
+----------------
 
 ### Sources
 - GLOBE Home Page - GLOBE.gov, http://www.globe.gov/. Accessed 29 September 2024.

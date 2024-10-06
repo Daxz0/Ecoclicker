@@ -5,6 +5,12 @@ local isBouncing = false
 local bounceTime = 0
 local bounceDuration = 0.2
 
+-- Fetch GLOBE data
+local http = require("socket.http")
+local body, code, headers, status = http.request("https://api.globe.gov/search/v1/measurement/?protocols=carbon_cycle&datefield=measuredDate&startdate=2010-01-01&enddate=2018-01-01&geojson=TRUE&sample=TRUE")
+print(code, status, #body)
+
+-- Format large numbers
 function formatNumber(num)
     if num >= 1e12 then
         return string.format("%.1ft", num / 1e12):gsub("%.0t", "t")
@@ -35,7 +41,9 @@ local data = {
             scalingCost = 1.2,
             effect = "ocean",
             amount = 28,
-            color = {0.678, 0.847, 0.902}
+            color = {0.678, 0.847, 0.902},
+            tempColor = nil,
+            tempColorDuration = 0
         },
         u2 = {
             name = "Trash Diver",
@@ -45,7 +53,9 @@ local data = {
             scalingCost = 1.5,
             effect = "ocean",
             amount = 300,
-            color = {0.678, 0.847, 0.902}
+            color = {0.678, 0.847, 0.902},
+            tempColor = nil,
+            tempColorDuration = 0
         },
         u3 = {
             name = "Cleaner Boat",
@@ -55,7 +65,9 @@ local data = {
             scalingCost = 2,
             effect = "ocean",
             amount = 3000,
-            color = {0.678, 0.847, 0.902}
+            color = {0.678, 0.847, 0.902},
+            tempColor = nil,
+            tempColorDuration = 0
         },
         u4 = {
             name = "Tree planter",
@@ -65,7 +77,9 @@ local data = {
             scalingCost = 2,
             effect = "bio",
             amount = 30,
-            color = {0.596, 0.984, 0.596}
+            color = {0.596, 0.984, 0.596},
+            tempColor = nil,
+            tempColorDuration = 0
         },
         u5 = {
             name = "Robot foresters",
@@ -75,7 +89,9 @@ local data = {
             scalingCost = 2,
             effect = "bio",
             amount = 700,
-            color = {0.596, 0.984, 0.596}
+            color = {0.596, 0.984, 0.596},
+            tempColor = nil,
+            tempColorDuration = 0
         },
         u6 = {
             name = "Carbon Scrubbers",
@@ -85,7 +101,9 @@ local data = {
             scalingCost = 1.5,
             effect = "atmo",
             amount = 50,
-            color = {0.83, 0.83, 0.83}
+            color = {0.83, 0.83, 0.83},
+            tempColor = nil,
+            tempColorDuration = 0
         },
         u7 = {
             name = "Seeding Drones",
@@ -95,7 +113,9 @@ local data = {
             scalingCost = 3,
             effect = "bio",
             amount = 4000,
-            color = {0.596, 0.984, 0.596}
+            color = {0.596, 0.984, 0.596},
+            tempColor = nil,
+            tempColorDuration = 0
         },
         u8 = {
             name = "Solar Panels",
@@ -105,22 +125,27 @@ local data = {
             scalingCost = 1.5,
             effect = "atmo",
             amount = 550,
-            color = {0.83, 0.83, 0.83}
+            color = {0.83, 0.83, 0.83},
+            tempColor = nil,
+            tempColorDuration = 0
         },
         u9 = {
-            name = "Public Transport Network",
+            name = "Public Transport",
             desc = "A massive network that can transport large amounts of people. Operates for the general public in a safe, affordable, environmentally friendly way.",
             level = 1,
             cost = 550000,
             scalingCost = 1.1,
             effect = "atmo",
             amount = 10,
-            color = {0.83, 0.83, 0.83}
+            color = {0.83, 0.83, 0.83},
+            tempColor = nil,
+            tempColorDuration = 0
         }
     }
 }
 
 local sortedUpgrades = {}
+
 
 function love.load()
     love.window.setMode(800, 600)
@@ -146,7 +171,7 @@ function love.load()
     end)
 end
 
-
+-- Handle upgrades and clicking logic
 function love.mousepressed(x, y, button)
     if button == 1 then
         local trashWidth, trashHeight = loaded["trash"]:getDimensions()
@@ -155,8 +180,8 @@ function love.mousepressed(x, y, button)
             isBouncing = true
             bounceTime = 0
         end
-        local alignY = 100
-        
+
+        local alignY = 65
         for _, upgrade in ipairs(sortedUpgrades) do
             if x >= 610 and x <= 790 and y >= alignY and y <= alignY + 50 then
                 if data.currency >= upgrade.cost then
@@ -164,24 +189,30 @@ function love.mousepressed(x, y, button)
                     upgrade.level = upgrade.level + 1
                     upgrade.cost = math.ceil(upgrade.cost * upgrade.scalingCost)
                     data.currencyPerSecond = data.currencyPerSecond + upgrade.amount
+                    data.currencyPerClick = data.currencyPerClick + math.ceil(upgrade.amount / 10)
+                    upgrade.tempColor = {0.2, 1, 0.2}
+                    upgrade.tempColorDuration = 0.1
                 end
             end
             alignY = alignY + 60
         end
+
     end
 end
 
+-- Update the game state
 local timer = 0
 
 function love.update(dt)
     timer = timer + dt
+
     if timer >= 1 then
         data.currency = data.currency + data.currencyPerSecond
         timer = 0
     end
     if isBouncing then
         bounceTime = bounceTime + dt
-        local scale = 0.1 + 0.1 * math.sin((bounceTime / bounceDuration) * (math.pi))
+        local scale = 0.1 + 0.1 * math.sin((bounceTime / bounceDuration) * math.pi)
         if bounceTime >= bounceDuration then
             scale = 0.2
             isBouncing = false
@@ -190,6 +221,16 @@ function love.update(dt)
     else
         scalingFactor = 0.2
     end
+    for _, upgrade in ipairs(sortedUpgrades) do
+        if upgrade.tempColorDuration > 0 then
+            upgrade.tempColorDuration = upgrade.tempColorDuration - dt
+            if upgrade.tempColorDuration <= 0 then
+                upgrade.tempColor = nil
+            end
+        end
+    end
+
+
 end
 
 local function wrapText(text, font, limit)
@@ -213,61 +254,99 @@ local function wrapText(text, font, limit)
 end
 
 function love.draw()
-    -- middle side
-    -- love.graphics.setColor(0.5,0.5,0.5)
-    -- love.graphics.rectangle("fill", 250, 0, 350, 600)
+    local effects = {
+        {
+            name = "Atmosphere",
+            color = {0.83, 0.83, 0.83},
+            carbon = 1000000
+        },
+        {
+            name = "Biosphere",
+            color = {0.596, 0.984, 0.596}
+        },
+        {
+            name = "Hydrosphere",
+            color = {0.678, 0.847, 0.902}
+        }
+    }
+    
+    local startY = -200
+    for i, effect in ipairs(effects) do
+        local y = startY + (i * 200)
+        love.graphics.setColor(unpack(effect.color))
+        love.graphics.rectangle("fill", 200, y, 500, 200)
+        love.graphics.setColor(0, 0, 0)
+        love.graphics.setFont(love.graphics.newFont(20))
+        love.graphics.print(effect.name, 255, y + 5)
+        love.graphics.setColor(1, 1, 1)
+    end
 
-    -- Left Side 
-    love.graphics.setColor(1, 1, 1)
     love.graphics.setColor(0.1, 0.5, 0.8)
     love.graphics.rectangle("fill", 0, 0, 250, 600)
     love.graphics.draw(loaded["backgroundleft"], 0, 0, 0, 250 / loaded["backgroundleft"]:getWidth(), 600 / loaded["backgroundleft"]:getHeight())
 
-    -- Right Side
     love.graphics.setColor(0.3, 0.3, 0.3)
     love.graphics.rectangle("fill", 600, 0, 200, 600)
-    love.graphics.setColor(1,1,1)
-    love.graphics.draw(loaded["trash"], 25, 200, 0, scalingFactor * 1.5, scalingFactor * 1.5)
+
+
+    -- trash
     love.graphics.setColor(1, 1, 1)
+    love.graphics.draw(loaded["trash"], 10, 200, 0, scalingFactor * 1.5, scalingFactor * 1.5)
+
+    local mouseX, mouseY = love.mouse.getPosition()
+    
+
     love.graphics.setFont(love.graphics.newFont(37))
     love.graphics.print("Upgrades", 610, 10)
 
-
-    -- Money Text
     love.graphics.setColor(0, 1, 0)
-    love.graphics.setFont(love.graphics.newFont(33))
-    love.graphics.print("Money: $" .. formatNumber(math.floor(data.currency)), 15, 20)
-    love.graphics.print("Money/Second: $" .. formatNumber(math.floor(data.currencyPerSecond)), 15, 65)
+    love.graphics.setFont(love.graphics.newFont(25))
+    love.graphics.print("Money: $" .. formatNumber(math.floor(data.currency)), 15, 25)
+    love.graphics.print("Money/S: $" .. formatNumber(math.floor(data.currencyPerSecond)), 15, 65)
+    love.graphics.print("Money/C: $" .. formatNumber(math.floor(data.currencyPerClick)), 15, 105)
 
-    -- GLOBE Text
     love.graphics.setColor(0.99, 0.99, 0.99)
     love.graphics.setFont(love.graphics.newFont(10))
-    love.graphics.print("GLOBE Protocols are standardized methods", 20, 500)
-    love.graphics.print("for collecting environmental data.", 20, 520)
-    love.graphics.print("They cover various Earth system areas such", 20, 540)
-    love.graphics.print("as the atmosphere, hydrosphere, biosphere.", 20, 560)
-    
+    love.graphics.print("GLOBE Protocols are standardized methods", 15, 500)
+    love.graphics.print("for collecting environmental data.", 15, 520)
+    love.graphics.print("They cover various Earth system areas such", 15, 540)
+    love.graphics.print("as the atmosphere, hydrosphere, biosphere.", 15, 560)
+
     local alignY = 65
-    local mouseX, mouseY = love.mouse.getPosition()
+
+    if globeData and #globeData.results > 0 then
+        local co2 = globeData.results[1].CO2
+        if co2 then
+            if co2 > 450 then
+                data.currencyPerSecond = data.currencyPerSecond * 0.9
+            elseif co2 < 400 then
+                data.currencyPerSecond = data.currencyPerSecond * 1.1
+            end
+        end
+    end
+    -- Draw upgrades
     for _, upgrade in ipairs(sortedUpgrades) do
         local isHovered = mouseX >= 610 and mouseX <= 790 and mouseY >= alignY and mouseY <= alignY + 50
-        if isHovered then
+        if upgrade.tempColor then
+            love.graphics.setColor(unpack(upgrade.tempColor))
+        elseif isHovered then
             love.graphics.setColor(0.9, 0.9, 0.9)
         else
             love.graphics.setColor(unpack(upgrade.color))
         end
+
         love.graphics.rectangle("fill", 610, alignY, 180, 50)
         love.graphics.setColor(0, 0, 0)
         love.graphics.setFont(love.graphics.newFont(13))
-        love.graphics.print(upgrade.name .. " (Lvl. " .. upgrade.level  .. ")", 620, alignY + 5)
+        love.graphics.print(upgrade.name .. " (Lvl. " .. upgrade.level .. ")", 620, alignY + 5)
         love.graphics.print("Cost: $" .. formatNumber(upgrade.cost), 620, alignY + 30)
+
         love.graphics.setFont(love.graphics.newFont(12))
         if isHovered then
             love.graphics.setColor(0, 0, 0, 0.6)
             local tooltipPadding = 10
             local tooltipWidth = 0
             local tooltipHeight = 0
-            
             local wrappedText = wrapText(upgrade.desc, love.graphics.newFont(12), 180 - tooltipPadding * 2)
             for _, line in ipairs(wrappedText) do
                 local lineWidth = love.graphics.getFont():getWidth(line)
@@ -277,15 +356,13 @@ function love.draw()
                 tooltipHeight = tooltipHeight + 15
             end
             tooltipHeight = tooltipHeight + tooltipPadding * 2
-        
             love.graphics.rectangle("fill", mouseX - tooltipWidth - tooltipPadding / 2, mouseY - tooltipHeight - 5, tooltipWidth + tooltipPadding, tooltipHeight)
             love.graphics.setColor(1, 1, 1)
-        
             for i, line in ipairs(wrappedText) do
                 love.graphics.print(line, mouseX - tooltipWidth, mouseY - tooltipHeight + (i - 1) * 15 - 5 + tooltipPadding / 2)
             end
         end
-        
+
         alignY = alignY + 60
     end
 end
